@@ -77,15 +77,40 @@ def hour_key(day_start, hour):
     return t.strftime("%Y-%m-%dT%H:00:00Z")
 
 
+def _viewers(row):
+    """Hourly viewers as a number >= 1, or None if the row is missing or
+    corrupt (null / non-numeric / non-finite). A single bad row must never
+    take down the whole case — the comparable is dropped instead."""
+    v = row.get("viewers")
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    if not math.isfinite(v):
+        return None
+    return max(1, v)
+
+
 def release_curve(comp):
     """The comparable's release-day hourly viewers, hours 1..24, or None."""
-    rows = {r["from"]: r["viewers"] for r in comp.get("hourly", [])}
+    day_start = comp.get("day_start")
+    if not isinstance(day_start, str):
+        return None
+    rows = {}
+    for r in comp.get("hourly", []) or []:
+        if not isinstance(r, dict):
+            continue
+        v = _viewers(r)
+        if v is not None:
+            rows[r.get("from")] = v
+    try:
+        keys = [hour_key(day_start, h) for h in range(1, 25)]
+    except ValueError:
+        return None
     curve = []
-    for h in range(1, 25):
-        v = rows.get(hour_key(comp["day_start"], h))
+    for k in keys:
+        v = rows.get(k)
         if v is None:
             return None
-        curve.append(max(1, v))
+        curve.append(v)
     return curve
 
 
